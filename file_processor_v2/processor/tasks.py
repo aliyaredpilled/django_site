@@ -77,6 +77,33 @@ except Exception as e:
 
 # --- Конец импортов пользовательских обработчиков ---
 
+# Вспомогательная функция для очистки оригинального загруженного файла
+def _cleanup_original_uploaded_file(task_db_instance: ProcessingTask, task_id_for_log: str):
+    """
+    Удаляет оригинальный загруженный файл, связанный с задачей.
+    """
+    if task_db_instance and task_db_instance.original_file and hasattr(task_db_instance.original_file, 'name') and task_db_instance.original_file.name:
+        try:
+            original_file_name_log = task_db_instance.original_file.name
+            print(f"[TASKS_CLEANUP] Попытка удаления оригинального загруженного файла: {original_file_name_log} для задачи {task_id_for_log}")
+            # Метод delete() удаляет файл с диска и очищает поле в модели, если save=True.
+            # save=True также сохраняет всю модель, что может быть избыточно, если мы сохраняем ее позже.
+            # Мы вызовем delete(save=False), а затем отдельно сохраним модель с очищенным полем.
+            task_db_instance.original_file.delete(save=False) 
+            task_db_instance.original_file = None # Убедимся, что поле очищено в экземпляре
+            task_db_instance.save(update_fields=['original_file', 'updated_at']) # Сохраняем только нужные поля
+            print(f"[TASKS_CLEANUP] Оригинальный файл {original_file_name_log} удален и поле в БД очищено для задачи {task_id_for_log}.")
+        except Exception as e_delete_orig:
+            # Используем locals() для безопасного доступа к original_file_name_log, если она не была присвоена
+            log_file_name = locals().get('original_file_name_log', 'unknown')
+            print(f"[TASKS_CLEANUP] Ошибка при удалении оригинального файла ({log_file_name}) для задачи {task_id_for_log}: {e_delete_orig}")
+    elif task_db_instance and not (hasattr(task_db_instance.original_file, 'name') and task_db_instance.original_file.name):
+        # Это условие означает, что поле original_file существует, но оно пустое (например, None или пустое FileField)
+        print(f"[TASKS_CLEANUP] Поле original_file для задачи {task_id_for_log} уже было пустым или не содержало имени файла. Пропускаем удаление.")
+    elif not task_db_instance:
+        print(f"[TASKS_CLEANUP] Экземпляр задачи не предоставлен для задачи {task_id_for_log}. Пропускаем удаление оригинального файла.")
+
+
 def create_excel_from_data(output_dir_path: Path, original_file_name: str, headers: list, data_rows: list) -> str:
     """
     Создает Excel-файл из предоставленных заголовков и строк данных.
@@ -423,6 +450,7 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
         error_message = f"Не удалось создать директорию для результатов: {output_dir_for_individual_files}. Ошибка: {str(e)}"
         self.update_state(state='FAILURE', meta={'current': 0, 'total': 0, 'status_message': error_message})
         task_db_instance.mark_as_failed(error_message)
+        _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
         return
 
     # 3. Проверяем, zip ли это, и подготавливаем список файлов для обработки
@@ -526,6 +554,7 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
                         import shutil
                         try: shutil.rmtree(temp_extract_dir)
                         except Exception as e_shutil_empty: print(f"[TASKS_DEBUG] Ошибка при удалении {temp_extract_dir} (нет файлов): {e_shutil_empty}")
+                    _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
                     return
             
             total_files = len(files_to_process_paths)
@@ -537,11 +566,13 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
             error_message = 'Ошибка: Неверный формат zip-архива.'
             self.update_state(state='FAILURE', meta={'current': 0, 'total': 0, 'status_message': error_message})
             task_db_instance.mark_as_failed(error_message)
+            _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
             return
         except Exception as e:
             error_message = f'Ошибка при распаковке zip-архива: {str(e)}'
             self.update_state(state='FAILURE', meta={'current': 0, 'total': 0, 'status_message': error_message})
             task_db_instance.mark_as_failed(error_message)
+            _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
             return
     else:
         # Если это не zip, а одиночный файл
@@ -556,6 +587,7 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
         error_message = "Не найдено файлов для обработки после анализа."
         self.update_state(state='FAILURE', meta={'current': 0, 'total': 0, 'status_message': error_message})
         task_db_instance.mark_as_failed(error_message)
+        _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
         return
         
     total_files = len(files_to_process_paths) # Обновляем total_files на случай если он изменился
@@ -635,6 +667,7 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
                     print(f"[TASKS_DEBUG] Временная папка {temp_extract_dir} удалена после ошибки.")
                 except Exception as e_shutil:
                     print(f"[TASKS_DEBUG] Ошибка при удалении временной папки {temp_extract_dir} после ошибки: {e_shutil}")
+            _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
             return # Завершаем всю задачу, так как один из файлов не обработался
 
     # 5. Завершение задачи и ОБЪЕДИНЕНИЕ ФАЙЛОВ
@@ -652,6 +685,7 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
                 shutil.rmtree(temp_extract_dir)
             except Exception as e_shutil_fail:
                  print(f"[TASKS_DEBUG] Ошибка при удалении временной папки {temp_extract_dir} при общем сбое: {e_shutil_fail}")
+        _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Очистка
         return
 
     # ПЫТАЕМСЯ ОБЪЕДИНИТЬ ФАЙЛЫ
@@ -746,4 +780,5 @@ def process_uploaded_file(self, file_path, processor_type, sub_type=None, db_tas
         except Exception as e_shutil_final:
             print(f"[TASKS_DEBUG] Ошибка при удалении временной папки {temp_extract_dir} в конце: {e_shutil_final}")
 
+    _cleanup_original_uploaded_file(task_db_instance, str(db_task_id)) # Финальная очистка перед успешным выходом
     return {'final_status': final_success_message, 'total_processed': len(processed_individual_excel_paths), 'final_output_path': path_for_result_link} 
