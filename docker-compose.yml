@@ -1,4 +1,72 @@
+version: '3.8'
+
 services:
-  web:
+  redis:
+    image: "redis:alpine"
     ports:
-      - "5000:8000" 
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./file_processor_v2 # Указывает на папку с Dockerfile
+      dockerfile: Dockerfile      # Имя Dockerfile внутри этой папки
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - ./file_processor_v2:/app                          # Код твоего Django проекта
+      # Пути к твоим папкам с обработчиками (относительно docker-compose.yml)
+      - ./reference_files:/app_external_handlers/reference_files
+      - ./smeta_ru:/app_external_handlers/smeta_ru
+      - ./grandsmeta:/app_external_handlers/grandsmeta
+      - ./turbosmetchik:/app_external_handlers/turbosmetchik
+      # Если utils.py лежит в корне /Users/aliya/handlers
+      - ./utils.py:/app_external_handlers/utils.py
+      # Тома для статики и медиа
+      - static_volume:/app/staticfiles # Django будет собирать статику сюда
+      - media_volume:/app/media        # Django будет сохранять загрузки и результаты сюда
+    ports:
+      - "5000:8000" # Внешний порт 5000, внутренний (Gunicorn) 8000
+    environment:
+      - DJANGO_SECRET_KEY=замени_меня_на_очень_длинный_и_секретный_ключ_на_сервере
+      - DJANGO_DEBUG=False # Для сервера всегда False
+      - DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,IP_АДРЕС_ТВОЕГО_СЕРВЕРА_ИЛИ_ДОМЕН # Замени!
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1 # Чтобы логи Python сразу выводились в Docker
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  celery_worker:
+    build:
+      context: ./file_processor_v2 # Тоже собираем из папки проекта
+      dockerfile: Dockerfile
+    # Убедись, что celery запускается от имени приложения 'config' (как в settings.py)
+    command: celery -A config.celery worker -l info
+    volumes:
+      - ./file_processor_v2:/app
+      # Пути к твоим папкам с обработчиками
+      - ./reference_files:/app_external_handlers/reference_files
+      - ./smeta_ru:/app_external_handlers/smeta_ru
+      - ./grandsmeta:/app_external_handlers/grandsmeta
+      - ./turbosmetchik:/app_external_handlers/turbosmetchik
+      - ./utils.py:/app_external_handlers/utils.py
+      # Celery тоже может понадобиться доступ к медиа, если задачи работают с файлами
+      - media_volume:/app/media
+    environment:
+      - DJANGO_SECRET_KEY=замени_меня_на_очень_длинный_и_секретный_ключ_на_сервере # Тот же ключ, что и для web
+      - DJANGO_DEBUG=False
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - redis
+      - web # Чтобы worker стартовал после web (на случай миграций и т.п.)
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+  static_volume:
+  media_volume: 
