@@ -1,0 +1,46 @@
+# Файлы и папки, которые Docker должен игнорировать при сборке образа
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Среды разработки и IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Git
+.git
+.gitignore
+
+# macOS
+.DS_Store
+
+# Папки, которые обычно монтируются как volumes или содержат пользовательские данные
+# Если они нужны именно внутри образа, а не как volume, то закомментируй
+media/
+static_collected/ # Если будешь использовать collectstatic
+data/ 
+
+# Локальные настройки Django (если есть)
+local_settings.py
+
+# Виртуальные окружения (если вдруг попадут в корень)
+venv/
+env/
+
+# Логи
+*.log
+logs/
+
+# Конфигурационные файлы Docker, которые не нужны внутри образа
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Файлы резервных копий редакторов
+*~
+*.bak
+*.swp 

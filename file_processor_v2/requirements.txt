@@ -1,0 +1,12 @@
+Django>=5.0,<6.0
+celery>=5.0,<6.0
+redis>=4.0,<5.0
+django-celery-results>=2.0,<3.0
+openpyxl>=3.0,<4.0
+gunicorn>=20.0,<21.0
+psycopg2-binary>=2.9,<3.0
+django-crispy-forms>=2.0,<3.0
+crispy-bootstrap5>=2023.0,<2025.0
+# psycopg2-binary на случай если захочешь перейти на PostgreSQL в Docker, 
+# для SQLite он не нужен, но пусть будет, не помешает.
+# Если будут ошибки при установке psycopg2-binary, его можно будет закомментировать. 

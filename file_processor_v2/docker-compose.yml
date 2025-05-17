@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379" # Пробрасываем порт Redis на твой компьютер, если захочешь подключиться к нему напрямую
+    volumes:
+      - redis_data:/data # Сохраняем данные Redis между перезапусками
+
+  web:
+    build: . # Собираем образ из Dockerfile в текущей директории
+    command: gunicorn --bind 0.0.0.0:8000 config.wsgi:application # Команда для запуска Django-сервера
+    volumes:
+      - .:/app  # Монтируем текущую директорию проекта (где docker-compose.yml) в /app в контейнере
+                # Это позволит видеть изменения в коде без пересборки образа (для разработки)
+      - /Users/aliya/handlers:/app_external_handlers # Монтируем твою папку с обработчиками и эталонами
+      - ./data/web:/app/data # Монтируем папку для данных веб-приложения, например, для SQLite
+    ports:
+      - "8000:8000" # Пробрасываем порт 8000 из контейнера на твой компьютер
+    depends_on:
+      - redis # Запускаем после Redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings # Убедись, что это правильный путь к твоему settings.py
+      - PYTHONUNBUFFERED=1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0 # Можно также использовать django-db
+
+  celery:
+    build: . # Используем тот же образ, что и для web
+    command: celery -A config worker -l info # Команда для запуска Celery worker
+                                            # 'config' - это имя твоего Django-проекта (папки с settings.py)
+    volumes:
+      - .:/app # Монтируем код проекта
+      - /Users/aliya/handlers:/app_external_handlers # Монтируем твою папку с обработчиками и эталонами
+      - ./data/celery:/app/data # Можно использовать для логов Celery или временных файлов, если нужно
+    depends_on:
+      - redis
+      - web # Опционально, но может быть полезно, если worker импортирует что-то, что требует готовности web
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings
+      - PYTHONUNBUFFERED=1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0 # Или django-db, если настроено в settings.py
+
+volumes:
+  redis_data: # Docker сам создаст этот volume для Redis 

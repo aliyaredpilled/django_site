@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Мой сайт обработки файлов{% endblock %}</title>
+    {% load static %}
+    <style>
+        :root {
+            --primary-color: #0052cc; 
+            --primary-hover-color: #003d99;
+            --accent-color: #00aaff; 
+            --accent-hover-color: #008ecc;
+            --background-color: #ffffff; 
+            --card-background: #f9fbfd; 
+            --text-color: #172b4d; 
+            --text-muted: #6b778c;
+            --success-color: #28a745; 
+            --danger-color: #dc3545; 
+            --progress-bar-background: #e9ecef;
+
+            --border-radius: 6px;
+            --box-shadow: 0 2px 8px rgba(23, 43, 77, 0.1);
+            --box-shadow-soft: 0 1px 4px rgba(23, 43, 77, 0.05);
+
+            --font-primary: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-primary, sans-serif);
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f6f8; 
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 700px;
+            margin: 30px auto;
+            padding: 25px 30px; 
+            background-color: var(--background-color);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+
+        h1, h2 {
+            color: var(--text-color);
+            text-align: center;
+            margin-bottom: 20px; 
+        }
+        h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 500;
+            margin-top: 30px;
+        }
+
+        .file-upload-form .form-group {
+            margin-bottom: 25px;
+        }
+
+        .file-upload-form label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500; 
+            color: var(--text-color);
+        }
+        
+        .file-upload-form input[type="file"],
+        .file-upload-form select {
+            display: block;
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #dee2e6; 
+            border-radius: var(--border-radius);
+            box-sizing: border-box;
+            background-color: #f8f9fa; 
+            color: #495057; 
+            font-size: 1rem;
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+        }
+
+        .file-upload-form input[type="file"]:hover,
+        .file-upload-form select:hover {
+            border-color: #adb5bd;
+        }
+
+        .file-upload-form input[type="file"]:focus,
+        .file-upload-form select:focus {
+            outline: 0;
+            border-color: var(--accent-color); 
+            box-shadow: 0 0 0 0.2rem rgba(0, 170, 255, 0.25); 
+        }
+
+        .file-upload-form select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 16px 12px;
+            padding-right: 2.5rem;
+        }
+
+        .file-upload-form select:required:invalid {
+          color: var(--text-muted);
+        }
+        .file-upload-form select option[value=""][disabled] {
+          display: none;
+        }
+        .file-upload-form select option {
+          color: var(--text-color);
+        }
+
+        button,
+        .button {
+            display: inline-block;
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 1rem; 
+            font-weight: 500;
+            text-align: center;
+            text-decoration: none;
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: var(--box-shadow-soft);
+        }
+
+        button:hover,
+        .button:hover {
+            background-color: var(--primary-hover-color);
+            box-shadow: var(--box-shadow);
+        }
+        
+        .file-upload-form button[type="submit"] {
+            width: 100%; 
+            margin-top: 20px;
+        }
+
+        .task-info-box {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: var(--card-background);
+            border: 1px solid #e0e6ed;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow-soft);
+        }
+        .task-info-box p {
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+        .task-info-box p strong {
+            color: var(--text-color); 
+        }
+        .task-info-box small {
+            color: var(--text-muted);
+            font-size: 0.85em;
+        }
+
+        #progress-container {
+            margin-top: 20px;
+        }
+
+        .progress-bar-container {
+            width: 100%;
+            background-color: var(--progress-bar-background);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            margin-bottom: 10px;
+            height: 28px; 
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .progress-bar {
+            width: 0%; 
+            height: 100%;
+            background-color: var(--accent-color); 
+            text-align: center;
+            line-height: 28px; 
+            color: white;
+            font-weight: 500;
+            transition: width 0.4s ease-in-out, background-color 0.4s ease-in-out;
+            background-image: linear-gradient(45deg, rgba(255, 255, 255, .15) 25%, transparent 25%, transparent 50%, rgba(255, 255, 255, .15) 50%, rgba(255, 255, 255, .15) 75%, transparent 75%, transparent);
+            background-size: 1rem 1rem;
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        
+        .progress-bar.success {
+            background-color: var(--success-color) !important; 
+        }
+        .progress-bar.failure {
+            background-color: var(--danger-color) !important; 
+        }
+
+        @keyframes progress-bar-stripes {
+          from { background-position: 1rem 0; }
+          to { background-position: 0 0; }
+        }
+
+        #status-message { 
+            font-style: italic;
+            color: var(--text-muted);
+            text-align: center;
+            margin-top: 5px;
+            min-height: 1.2em; 
+        }
+        
+        #result-display-area {
+            margin-top: 15px;
+            text-align: center;
+        }
+
+        #result-container, #error-container {
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 15px;
+        }
+
+        #result-container {
+            background-color: #e6f7ff; 
+            border: 1px solid var(--accent-color);
+        }
+        #result-message.success-message { 
+            color: var(--primary-color); 
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+        
+        .alert.alert-danger { 
+            color: #721c24; 
+            background-color: #f8d7da; 
+            border: 1px solid #f5c6cb; 
+        }
+        #error-message-text { 
+             font-weight: 500;
+        }
+
+        #download-button {
+            margin-top: 10px;
+            background-color: var(--success-color); 
+        }
+        #download-button:hover {
+            background-color: #1e7e34; 
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <div class="container">
+        {% block content %}
+        <!-- Сюда будет вставляться содержимое дочерних шаблонов -->
+        {% endblock %}
+    </div>
+
+    {% block extra_js_before_body_end %}{% endblock %}
+</body>
+</html> 

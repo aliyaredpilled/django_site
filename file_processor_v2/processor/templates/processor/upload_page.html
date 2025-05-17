@@ -1,0 +1,294 @@
+{% extends "processor/base.html" %}
+{% load crispy_forms_tags %}
+{% load static %}
+{# {% load filename_filters %} #}
+
+{% block title %}{{ page_title|default:"Обработка файлов" }}{% endblock %}
+
+{% block content %}
+<h1>{{ page_title|default:"Центр обработки смет" }}</h1>
+
+<form method="post" enctype="multipart/form-data" class="file-upload-form">
+    {% csrf_token %}
+    {{ form|crispy }}
+    <button type="submit" class="button">Загрузить и обработать</button>
+</form>
+
+{% if task_to_display %}
+    <div id="task-details-initial" class="task-info-box" data-task-id="{{ task_to_display.id }}" data-task-status="{{ task_to_display.status }}">
+        <h2>Статус последней задачи</h2>
+        <p><strong>ID Задачи:</strong> <span id="initial-task-id">{{ task_to_display.id }}</span></p>
+        <p><strong>Файл:</strong> <span id="initial-file-name">{{ task_to_display.original_file_name }}</span></p>
+        <p><strong>Текущий Статус:</strong> <span id="initial-status-text">{{ task_to_display.get_status_display }}</span></p>
+
+        <div id="progress-container" style="display: none;">
+            <div class="progress-bar-container">
+                <div class="progress-bar {% if task_to_display.status == 'SUCCESS' %}success{% elif task_to_display.status == 'FAILURE' %}failure{% endif %}" 
+                     id="dynamic-progress-bar" 
+                     style="width: {% if task_to_display.progress_info.total > 0 %}{% widthratio task_to_display.progress_info.current task_to_display.progress_info.total 100 %}{% else %}{% if task_to_display.status == 'SUCCESS' %}100{% else %}0{% endif %}{% endif %}%;">
+                    <span id="dynamic-progress-text">{% if task_to_display.progress_info.total > 0 %}{% widthratio task_to_display.progress_info.current task_to_display.progress_info.total 100 %}{% else %}{% if task_to_display.status == 'SUCCESS' %}100{% else %}0{% endif %}{% endif %}%</span>
+                </div>
+            </div>
+            <p id="status-message">
+                {% if task_to_display.progress_info.status_message %}
+                    {{ task_to_display.progress_info.status_message }}
+                {% elif task_to_display.status == 'PENDING' %}
+                    Задача в очереди...
+                {% elif task_to_display.status == 'STARTED' %}
+                    Задача запущена...
+                {% elif task_to_display.status == 'SUCCESS' %}
+                    {{ task_to_display.result_message|default:"Завершено" }}
+                {% elif task_to_display.status == 'FAILURE' %}
+                     {{ task_to_display.result_message|default:"Ошибка" }}
+                {% endif %}
+            </p>
+        </div>
+
+        <div id="result-display-area">
+            <div id="result-container" style="display: {% if task_to_display.status == 'SUCCESS' and result_file_url_initial %}block{% else %}none{% endif %};">
+                 <p id="result-message" class="success-message">
+                    {% if task_to_display.status == 'SUCCESS' %}{{ task_to_display.result_message|default:"Задача успешно завершена." }}{% endif %}
+                 </p>
+                {% if result_file_url_initial %}
+                    <a id="download-button" class="button" href="{{ result_file_url_initial }}" download="{{ result_filename_initial }}" style="display: {{ result_file_url_initial|yesno:'inline,none' }};">
+                        {{ result_filename_initial }}
+                    </a>
+                {% else %}
+                     <a id="download-button" class="button" href="#" style="display:none;">Скачать результат</a>
+                {% endif %}
+            </div>
+            <div id="error-container" style="display: {% if task_to_display.status == 'FAILURE' %}block{% else %}none{% endif %};">
+                <div class="alert alert-danger" id="error-message-text">
+                     {% if task_to_display.status == 'FAILURE' %}{{ task_to_display.result_message|default:"Произошла ошибка при обработке." }}{% endif %}
+                </div>
+            </div>
+        </div>
+         <p><small><i>Celery ID: <span id="initial-celery-id">{{ task_to_display.task_celery_id|default:"N/A" }}</span> | Обновлено: <span id="initial-updated-at">{{ task_to_display.updated_at|date:"d.m.Y H:i:s" }}</span></i></small></p>
+    </div>
+{% else %}
+    <p style="text-align:center; margin-top:20px; color: var(--text-muted);">Нет недавних задач. Загрузите файл, чтобы начать обработку.</p>
+{% endif %}
+{% endblock %}
+
+{% block extra_js_before_body_end %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- НАЧАЛО ДОБАВЛЕННОГО КОДА ДЛЯ ТУРБОСМЕТЧИКА И СКРЫТИЯ ID ---
+        const processorTypeSelect = document.getElementById('id_processor_type'); // Crispy Forms должен создать этот ID
+        const turboSubtypeDiv = document.getElementById('div_id_sub_type');     // Crispy Forms должен создать этот ID для поля sub_type
+
+        function toggleTurboSubtypeVisibility() {
+            if (processorTypeSelect && turboSubtypeDiv) {
+                if (processorTypeSelect.value === 'turbosmetchik') {
+                    turboSubtypeDiv.style.display = ''; // Показываем
+                } else {
+                    turboSubtypeDiv.style.display = 'none'; // Скрываем
+                }
+            }
+        }
+
+        if (processorTypeSelect) {
+            processorTypeSelect.addEventListener('change', toggleTurboSubtypeVisibility);
+            // Инициализация при загрузке страницы
+            toggleTurboSubtypeVisibility(); 
+        }
+
+        // Скрытие технической информации
+        const taskDetailsBox = document.getElementById('task-details-initial');
+        if (taskDetailsBox) {
+            const paragraphs = taskDetailsBox.getElementsByTagName('p');
+            for (let p of paragraphs) {
+                if (p.innerHTML.includes('<strong>ID Задачи:</strong>') || 
+                    p.innerHTML.includes('<i>Celery ID:')) {
+                    p.style.display = 'none';
+                }
+            }
+        }
+        // --- КОНЕЦ ДОБАВЛЕННОГО КОДА ---
+
+        const taskDetailsInitial = document.getElementById('task-details-initial');
+        if (!taskDetailsInitial) return;
+
+        const taskId = taskDetailsInitial.dataset.taskId;
+        let currentTaskStatus = taskDetailsInitial.dataset.taskStatus;
+
+        const progressContainerElem = document.getElementById('progress-container');
+        const progressBarElem = document.getElementById('dynamic-progress-bar');
+        const progressTextElem = document.getElementById('dynamic-progress-text');
+        
+        const statusTextDisplayElem = document.getElementById('initial-status-text'); 
+        const statusMessageDetailElem = document.getElementById('status-message');   
+
+        const resultContainerElem = document.getElementById('result-container');
+        const resultMessageElem = document.getElementById('result-message');
+        const downloadButtonElem = document.getElementById('download-button');
+
+        const errorContainerElem = document.getElementById('error-container');
+        const errorMessageTextElem = document.getElementById('error-message-text');
+        
+        const celeryIdElem = document.getElementById('initial-celery-id');
+        const updatedAtElem = document.getElementById('initial-updated-at');
+
+        function updatePageWithData(data) {
+            if (!data) return;
+
+            currentTaskStatus = data.status;
+            if (statusTextDisplayElem) statusTextDisplayElem.textContent = data.status_display;
+            if (celeryIdElem) celeryIdElem.textContent = data.task_celery_id || "N/A";
+            if (updatedAtElem && data.updated_at) {
+                 updatedAtElem.textContent = new Date(data.updated_at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+
+            progressContainerElem.style.display = 'block';
+            progressBarElem.classList.remove('success', 'failure');
+
+            if (data.status === 'PROGRESS' || data.status === 'STARTED') {
+                let progressPercent = 0;
+                if (data.progress_info && typeof data.progress_info.current === 'number' && data.progress_info.total > 0) {
+                    progressPercent = (data.progress_info.current / data.progress_info.total) * 100;
+                }
+                progressBarElem.style.width = progressPercent + '%';
+                progressTextElem.textContent = progressPercent.toFixed(0) + '%';
+                statusMessageDetailElem.textContent = data.progress_info.status_message || data.status_display;
+                
+                resultContainerElem.style.display = 'none';
+                errorContainerElem.style.display = 'none';
+
+            } else if (data.status === 'SUCCESS') {
+                progressBarElem.style.width = '100%';
+                progressTextElem.textContent = '100%';
+                progressBarElem.classList.add('success');
+                statusMessageDetailElem.textContent = data.result_message || "Задача успешно завершена!";
+
+                resultContainerElem.style.display = 'block';
+                errorContainerElem.style.display = 'none';
+                if (resultMessageElem) resultMessageElem.textContent = data.result_message || 'Задача успешно выполнена!';
+
+                if (data.result_file_url && data.result_file_name) {
+                    downloadButtonElem.href = data.result_file_url;
+                    downloadButtonElem.download = data.result_file_name;
+                    downloadButtonElem.textContent = `Скачать ${data.result_file_name}`;
+                    downloadButtonElem.style.display = 'inline-block';
+                } else {
+                    downloadButtonElem.style.display = 'none';
+                }
+            } else if (data.status === 'FAILURE') {
+                let progressPercent = 0;
+                 if (data.progress_info && typeof data.progress_info.current === 'number' && data.progress_info.total > 0) {
+                    progressPercent = (data.progress_info.current / data.progress_info.total) * 100;
+                } else {
+                     progressPercent = 0;
+                }
+                progressBarElem.style.width = progressPercent > 0 ? progressPercent + '%' : '100%'; 
+                progressTextElem.textContent = progressPercent > 0 ? progressPercent.toFixed(0) + '%' : 'Ошибка';
+                progressBarElem.classList.add('failure');
+                statusMessageDetailElem.textContent = data.result_message || "Произошла ошибка.";
+
+                resultContainerElem.style.display = 'none';
+                errorContainerElem.style.display = 'block';
+                if (errorMessageTextElem) errorMessageTextElem.textContent = data.result_message || 'Произошла ошибка при обработке.';
+            } else if (data.status === 'PENDING') {
+                progressBarElem.style.width = '0%';
+                progressTextElem.textContent = '0%';
+                statusMessageDetailElem.textContent = data.status_display;
+                resultContainerElem.style.display = 'none';
+                errorContainerElem.style.display = 'none';
+            }
+        }
+
+        let pollingInterval = null;
+
+        function startPolling() {
+            if (currentTaskStatus === 'PENDING' || currentTaskStatus === 'STARTED' || currentTaskStatus === 'PROGRESS') {
+                 progressContainerElem.style.display = 'block';
+            }
+            
+            fetchTaskStatus();
+            pollingInterval = setInterval(fetchTaskStatus, 2500);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+        }
+
+        function fetchTaskStatus() {
+            if (!taskId) {
+                stopPolling();
+                return;
+            }
+
+            fetch(`/processing/task-status/${taskId}/`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    updatePageWithData(data);
+                    if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
+                        stopPolling();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching task status:', error);
+                    if(statusMessageDetailElem) statusMessageDetailElem.textContent = "Ошибка при обновлении статуса.";
+                });
+        }
+
+        if (taskId) {
+            const initialProgressTotalText = "{{ task_to_display.progress_info.total|default:'0' }}";
+            const initialProgressCurrentText = "{{ task_to_display.progress_info.current|default:'0' }}";
+            
+            let initialProgressTotal = parseInt(initialProgressTotalText, 10) || 0;
+            let initialProgressCurrent = parseInt(initialProgressCurrentText, 10) || 0;
+
+            const initialResultUrl = "{{ result_file_url_initial|default:'' }}";
+            const initialResultName = "{{ result_filename_initial|default:'' }}";
+
+            const initialDataForPage = {
+                id: taskId,
+                status: currentTaskStatus,
+                status_display: statusTextDisplayElem ? statusTextDisplayElem.textContent : currentTaskStatus,
+                progress_info: {
+                    current: initialProgressCurrent,
+                    total: initialProgressTotal,
+                    status_message: statusMessageDetailElem ? statusMessageDetailElem.textContent : ""
+                },
+                result_message: (resultMessageElem && resultMessageElem.textContent.trim() !== "") ? resultMessageElem.textContent.trim() : 
+                                ((errorMessageTextElem && errorMessageTextElem.textContent.trim() !== "") ? errorMessageTextElem.textContent.trim() : null),
+                task_celery_id: celeryIdElem ? celeryIdElem.textContent : null,
+                updated_at: null,
+                result_file_url: initialResultUrl,
+                result_file_name: initialResultName
+            };
+            
+            if (updatedAtElem && updatedAtElem.textContent) {
+                const dateText = updatedAtElem.textContent.trim();
+                const dateParts = dateText.match(/(\d{2})\.(\d{2})\.(\d{4}),?\s(\d{2}):(\d{2}):(\d{2})/);
+                if (dateParts) {
+                    initialDataForPage.updated_at = new Date(`${dateParts[3]}-${dateParts[2]}-${dateParts[1]}T${dateParts[4]}:${dateParts[5]}:${dateParts[6]}`).toISOString();
+                } else {
+                     initialDataForPage.updated_at = new Date().toISOString();
+                }
+            }
+
+            updatePageWithData(initialDataForPage);
+
+            if (currentTaskStatus === 'PENDING' || currentTaskStatus === 'STARTED' || currentTaskStatus === 'PROGRESS') {
+                startPolling();
+            } else {
+                 progressContainerElem.style.display = 'block';
+                 if (currentTaskStatus === 'SUCCESS' && initialResultUrl) {
+                     resultContainerElem.style.display = 'block';
+                 } else if (currentTaskStatus === 'FAILURE') {
+                     errorContainerElem.style.display = 'block';
+                 }
+            }
+        }
+    });
+</script>
+{% endblock %}
