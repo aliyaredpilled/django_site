@@ -13,7 +13,7 @@ build/
 # Django specific, assuming project is in 'file_processor_v2'
 file_processor_v2/__pycache__/
 file_processor_v2/staticfiles/
-file_processor_v2/mediafiles/
+file_processor_v2/media/
 file_processor_v2/temp_unzip_tasks/
 file_processor_v2/*.sqlite3
 file_processor_v2/db.sqlite3
