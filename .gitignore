@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Django specific, assuming project is in 'file_processor_v2'
+file_processor_v2/__pycache__/
+file_processor_v2/staticfiles/
+file_processor_v2/mediafiles/
+file_processor_v2/temp_unzip_tasks/
+file_processor_v2/*.sqlite3
+file_processor_v2/db.sqlite3
+
+# IDE / OS specific
+.vscode/
+.idea/
+.DS_Store
+*~
+*.swp
+
+# Log files
+*.log
+logs/
+
+# Celery/Redis specific (if any local files)
+dump.rdb
+celerybeat-schedule 
